@@ -30,6 +30,7 @@ int main(int argc, char* argv[]){
 	int acc_rqst, n_read;
 	char bin;
 	int tmp=0;
+	int ret;
 
 	
 	for(int i=0; i<PH_NUM; i++){
@@ -39,8 +40,8 @@ int main(int argc, char* argv[]){
 		sprintf(fifo_rqst[i], "%s%d", str1, i);
 		sprintf(fifo_rls[i], "%s%d", str2, i);
 
-		if((fd_rls[i]  = open(fifo_rls[i], O_RDONLY))<0)	perror("Release pipe opening");	
-		if((fd_rqst[i] = open(fifo_rqst[i], O_RDONLY))<0)	perror("Request pipe opening");
+		if((fd_rls[i]  = open(fifo_rls[i], O_RDONLY))<0)	{ perror("Release pipe opening"); exit(fd_rls[i]);  }
+		if((fd_rqst[i] = open(fifo_rqst[i], O_RDONLY))<0)	{ perror("Request pipe opening"); exit(fd_rqst[i]); }
 		// Order of the open is important! Open on a named pipe hangs until both ends are open.
 		
 		// what would happen if we tried to open first the "release" and then "request" here for a certain philosopher
@@ -59,14 +60,13 @@ int main(int argc, char* argv[]){
 		FD_ZERO(&rqst);
 		
 		for(int i=0; i<PH_NUM; i++){
-			FD_SET(fd_rqst[i], &rqst);
 			FD_SET(fd_rls[i], &rls);
 			readable[i] = -1; // just clearing the array to be safe
 		}
 		
 		// -------------- CHOPSTICKS RELEASES ------------------------
 		printf("Waiter selecting the released chopsticks\n"); fflush(stdout);
-		if(select(nfds_rls, &rls, NULL, NULL, &tv) < 0)	perror("Select on release pipes");
+		if((ret=select(nfds_rls, &rls, NULL, NULL, &tv)) < 0){	perror("Select on release pipes"); exit(ret); }
 		for(int i=0; i<PH_NUM; i++){
 			if(FD_ISSET(fd_rls[i], &rls)){
 				read(fd_rls[i], &bin, sizeof(char));	// I read just one byte, it's not meaningful, in order to empty the pipe for next possible read
@@ -91,7 +91,7 @@ int main(int argc, char* argv[]){
 		}
 		// NOTE: nfds_rqst needs to be updated, depending on which pairs of chopsticks are available, which in turn define which pipes we are going to listen to
 		
-		if(select(nfds_rqst, &rqst, NULL, NULL, &tv) < 0)	perror("Select on request pipes");
+		if((ret=select(nfds_rqst, &rqst, NULL, NULL, &tv)) < 0){ perror("Select on request pipes"); exit(ret); }
 		// now randomness is mandatory, I can select just one philosphers!
 		
 		n_read=0;
@@ -109,7 +109,7 @@ int main(int argc, char* argv[]){
 			acc_rqst = readable[tmp]; 	// FIFO from which the waiter is gonna read
 			// it's not completely random, first because rand() in not crypto-safe, than 'cause probably max value it could return is not a multiple of n_read
 			// but we'll make do with what we have easily accessible
-			if(read(fd_rqst[acc_rqst], &bin, sizeof(char))<0) perror("Read from readable pipe gone wrong. Probably caused by an interrupt");
+			if((ret=read(fd_rqst[acc_rqst], &bin, sizeof(char)))<0){ perror("Read from readable pipe gone wrong. Probably caused by an interrupt"); exit(ret); }
 			// FIFO should be readable by now, if errors occour it's highly plausible some signal interrupted the communication.
 			// again we read not to obtain info, but just to empty the FIFO
 			
@@ -118,9 +118,9 @@ int main(int argc, char* argv[]){
 			
 			// The next open-close sequence is explained on the long comment down below!
 			close(fd_rqst[acc_rqst]);
-			if((fd_rqst[acc_rqst] = open(fifo_rqst[acc_rqst], O_WRONLY))<0)	perror("Confirming accepted request");
+			if((fd_rqst[acc_rqst] = open(fifo_rqst[acc_rqst], O_WRONLY))<0){	perror("Confirming accepted request"); close(fd_rqst[acc_rqst]); }
 			bin = 'c';
-			if(write(fd_rqst[acc_rqst], &bin, sizeof(char))<0) perror("Read from readable pipe gone wrong. Probably caused by an interrupt");
+			if((ret=write(fd_rqst[acc_rqst], &bin, sizeof(char)))<0){ perror("Read from readable pipe gone wrong. Probably caused by an interrupt"); exit(ret); }
 			printf("Accepted philosopher %d\n", acc_rqst); fflush(stdout);
 			
 			printf("POST ASSIGNMENT\n");
@@ -129,7 +129,7 @@ int main(int argc, char* argv[]){
 			}
 			
 			close(fd_rqst[acc_rqst]);
-			if((fd_rqst[acc_rqst] = open(fifo_rqst[acc_rqst], O_RDONLY))<0)	perror("Reopening accepted request pipe in readonly mode");
+			if((fd_rqst[acc_rqst] = open(fifo_rqst[acc_rqst], O_RDONLY))<0){ perror("Reopening accepted request pipe in readonly mode"); exit(fd_rqst[acc_rqst]);}
 		
 			printf("------------------\n");
 			

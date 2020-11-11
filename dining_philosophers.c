@@ -42,14 +42,18 @@ int main(int argc, char *argv[]){
 	char fifo_rls[PH_NUM][20];
 	char *str_phil = "./philosopher";
 	char *str_wtr = "./waiter";
+	int ret;
 	
-	c_pid=clean_prev();
+	if((c_pid=clean_prev())<0){
+		perror("Clean generation\n");
+		exit(c_pid);
+	}
 	waitpid(c_pid, NULL, 0);	// note that it's necessary to wait for it to end, or we could end up cleaning those files while the waiter or philosophers try to open them
 	printf("Cleaning previous FIFO\n"); fflush(stdout);
 
 	if((wtr_pid = spawn(str_wtr, PH_NUM))<0){
 		perror("Waiter generation");
-		exit(1);
+		exit(wtr_pid);
 	}
 
 	for(int i=0; i<PH_NUM; i++){
@@ -74,6 +78,7 @@ int main(int argc, char *argv[]){
 // ------------------------------------------------------------------------------
 
 int spawn(char* ex_name, int id) {
+	int ret;
 	pid_t child_pid = fork();
 	if (child_pid != 0)
 	{	
@@ -84,23 +89,26 @@ int spawn(char* ex_name, int id) {
 		char tmp[5]="";
 		sprintf(tmp, "%d", id);
 		char * args[] = { "/usr/bin/konsole",  "-e", ex_name, tmp, (char*)NULL };
-		execvp(args[0], args);
+		ret = execvp(args[0], args);
 		perror("exec failed");
-		return 1;
+		exit(ret);
 	}
 }
 
 int clean_prev(){
 	char tmp[5];
+	int ret;
 	sprintf(tmp, "%d", PH_NUM);
 	char *args[] = {"./clean_tmp_fifo", tmp, NULL};
 	int pid = fork();
 	if (pid<0){
 		perror("clean child");
-		exit(1);
+		return pid;
 	}
 	if (pid==0){
-		execvp(args[0], args);
+		ret = execvp(args[0], args);
+		perror("Clean exec");
+		return ret;
 	}
 	return pid;
 }

@@ -21,6 +21,8 @@ int main(int argc, char* argv[]){
 	char fifo_rls[20];
 	int fd_rqst, fd_rls;
 	char bin;
+	int ret;
+	unsigned long int step=0;
 	
 	printf("Philosopher %d spawned, PID %d\n", id, getpid());
 	// fifo opening
@@ -29,8 +31,8 @@ int main(int argc, char* argv[]){
 	sprintf(fifo_rqst, "%s%d", str1, id);
 	sprintf(fifo_rls, "%s%d", str2, id);
 
-	if((fd_rls  = open(fifo_rls,  O_WRONLY))<0)	perror("Release pipe opening");	
-	if((fd_rqst = open(fifo_rqst, O_WRONLY))<0)	perror("Request pipe opening");
+	if((fd_rls  = open(fifo_rls,  O_WRONLY))<0){ perror("Release pipe opening"); exit(fd_rls);  }
+	if((fd_rqst = open(fifo_rqst, O_WRONLY))<0){ perror("Request pipe opening"); exit(fd_rqst); }
 
 	printf("Philosopher %d sat to the table\n", id); fflush(stdout);
 	
@@ -47,20 +49,20 @@ int main(int argc, char* argv[]){
 		printf("%d waiting for chopsticks\n", id); fflush(stdout);
 		close(fd_rqst);
 		// WAIT until confirmation
-		if((fd_rqst = open(fifo_rqst, O_RDONLY))<0)	perror("Request pipe opening readonly");
-		if(read(fd_rqst, &bin, sizeof(char)) < 0) 	perror("PH write");
+		if((fd_rqst = open(fifo_rqst, O_RDONLY))<0){ perror("Request pipe opening readonly"); exit(fd_rqst); }
+		if((ret=read(fd_rqst, &bin, sizeof(char))) < 0){ perror("PH write"); exit(ret); }
 		close(fd_rqst);
-		if((fd_rqst = open(fifo_rqst, O_WRONLY))<0)	perror("Request pipe opening");
+		if((fd_rqst = open(fifo_rqst, O_WRONLY))<0){ perror("Request pipe opening"); exit(fd_rqst); }
 
 		// write itself is not blocking (unless I write more char than fifo size, which seems overdoing it
 		// filling the pipe would require the assumptions that no one but the waiter is reading from it.
 		
 		// If the process managed to arrive here means that it received the chopsticks
 		// eat for max 3s
-		printf("%d eating!\n", id); fflush(stdout);
+		printf("%d eating, %lu!\n", id, step++); fflush(stdout);
 		usleep(rand()%3000 * 1000);
 		printf("%d releasing chopsticks!\n", id);
-		if(write(fd_rls, &bin, sizeof(char)) < 0) perror("PH write chopstick release");
+		if((ret=write(fd_rls, &bin, sizeof(char))) < 0){ perror("PH write chopstick release"); exit(ret); }
 		// release chopsticks
 		
 	}
